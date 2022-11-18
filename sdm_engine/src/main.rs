@@ -1,6 +1,7 @@
 use sdm_engine::*;
 use sdm_engine::sdm::*;
 
+// TODO: Remove "Wrapper" from macro names
 EntityWrapper! {
     pub struct Carro {
         cor: String,
@@ -27,7 +28,7 @@ ProcessWrapper! {
     @on_start = |proc| {
         if proc.fila.is_empty() {
             if proc.frentista.allocate(1).is_ok() {
-                println!("Inicio abastecimento");
+                println!("Inicio abastecimento: {}", Scheduler::time());
                 proc.carro = proc.fila.pop().unwrap();
             }
         }
@@ -45,7 +46,7 @@ EventWrapper! {
     };
 
     @execute = |event| {
-        println!("Chegada");
+        println!("Chegada: {}", Scheduler::time());
     };
 }
 
