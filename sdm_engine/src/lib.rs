@@ -1,4 +1,5 @@
 pub mod sdm;
+pub use sdm::distributions;
 
 #[cfg(test)]
 mod tests {

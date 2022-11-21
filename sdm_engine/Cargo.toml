@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 petri_engine = { git = "https://github.com/matbme/PetriEngine" }
 anyhow = "1.0"
+rand = "0.8.5"
 
 [dependencies.uuid]
 version = "1.2.1"

@@ -1,3 +1,4 @@
+pub mod distributions;
 pub mod entity_set;
 pub mod entity;
 pub mod event;

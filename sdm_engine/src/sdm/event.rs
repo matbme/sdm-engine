@@ -30,6 +30,10 @@ macro_rules! EventWrapper {
                     $($($varname,)*)?
                 }
             }
+
+            pub fn name(&self) -> &str {
+                &self.name
+            }
         }
     };
 }

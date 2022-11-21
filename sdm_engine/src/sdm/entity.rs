@@ -54,7 +54,7 @@ macro_rules! EntityWrapper {
         }
 
         impl $name {
-            pub fn new(name: String, creation_time: f32 $(,$($varname: $type),*)?) -> Self {
+            pub fn new(name: &str, creation_time: f32 $(,$($varname: $type),*)?) -> Self {
                 Self {
                     name: name.to_string(),
                     id: uuid::Uuid::new_v4(),

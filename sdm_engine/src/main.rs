@@ -1,13 +1,11 @@
 use sdm_engine::*;
 use sdm_engine::sdm::*;
 
+use std::rc::Rc;
+
 // TODO: Remove "Wrapper" from macro names
 EntityWrapper! {
-    pub struct Carro {
-        cor: String,
-        marca: String,
-        teste: i32,
-    };
+    pub struct Carro;
 }
 
 ResourceWrapper! {
@@ -42,11 +40,23 @@ ProcessWrapper! {
 EventWrapper! {
     pub struct Chegada {
         time_limit: f32,
-        fila: Fila,
+        fila: Rc<Fila>,
     };
 
     @execute = |event| {
         println!("Chegada: {}", Scheduler::time());
+        if Scheduler::time() < event.time_limit {
+            // Schedules new arrival in 5s
+            Scheduler::instance()
+                .unwrap()
+                .schedule_in(
+                    Box::new(Chegada::new("Chegada", 100.0, event.fila.clone())),
+                    5.0
+                );
+
+            // Adds car to queue
+            event.fila.push(Carro::new("Carro", Scheduler::time()))
+        }
     };
 }
 
