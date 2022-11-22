@@ -10,9 +10,9 @@ pub struct ProcessQueue(pub RefCell<Vec<(f32, Box<dyn Process>)>>);
 
 pub struct Scheduler {
     time: f32,
-    event_queue: EventQueue,
-    started_processes: RefCell<Vec<Box<dyn Process>>>,
-    process_queue: ProcessQueue,
+    event_queue: EventQueue,                            // Future events
+    started_processes: RefCell<Vec<Box<dyn Process>>>,  // Process to run every cicle
+    process_queue: ProcessQueue,                        // Future processes
 }
 
 impl Drop for Scheduler {
@@ -22,19 +22,18 @@ impl Drop for Scheduler {
 }
 
 impl Scheduler {
-    pub fn new() -> Result<&'static Self> {
+    pub fn new() -> Result<()> {
         if !Self::instanciated() {
-            // FIXME: Needs to be created as static
-            let mut instance = Self {
+            let instance = Box::new(Self {
                 time: 0f32,
                 event_queue: EventQueue(RefCell::new(vec![])),
                 started_processes: RefCell::new(vec![]),
                 process_queue: ProcessQueue(RefCell::new(vec![])),
-            };
+            });
 
-            SCHEDULER_INSTANCE.store(std::ptr::addr_of_mut!(instance), Ordering::Relaxed);
+            SCHEDULER_INSTANCE.store(Box::into_raw(instance), Ordering::Relaxed);
 
-            Ok(&instance)
+            Ok(())
         } else {
             Err(anyhow!("There is already another instance of Scheduler, please drop it before creating a new scheduler instance"))
         }
@@ -50,9 +49,13 @@ impl Scheduler {
         }
     }
 
-    pub fn instance() -> Result<&'static Self> {
+    pub fn set_time(&mut self, time: f32) {
+        self.time = time;
+    }
+
+    pub fn instance() -> Result<&'static mut Self> {
         unsafe {
-            if let Some(instance) = SCHEDULER_INSTANCE.load(Ordering::Relaxed).as_ref() {
+            if let Some(instance) = SCHEDULER_INSTANCE.load(Ordering::Relaxed).as_mut() {
                 Ok(instance)
             } else {
                 Err(anyhow!("No scheduler has been instanciated"))
@@ -126,15 +129,32 @@ impl Scheduler {
     //
     // }
 
-    pub fn simulate_one_step(&self) {
+    /// Simulates one step, returns whether stop condition is met
+    pub fn simulate_one_step(&self) -> bool {
         // Get first item from FEL
+        if let Some(mut event) = self.event_queue.0.borrow_mut().pop() {
+            // Set time to event time
+            if Self::time() < event.0 {
+                Self::instance().unwrap().set_time(event.0);
+            } else if Self::time() > event.0 {
+                // Sanity check
+                panic!("Event time is in the past! Something has gone terribly wrong!")
+            }
 
-        // Set time to event time
+            // Dispatch event according to listener
+            event.1.execute();
 
-        // Dispatch event according to listener
+            // Execute processes
+            for proc in self.started_processes.borrow_mut().iter_mut() {
+                let ends_in = proc.start();
+            }
 
-        // Execute processes(?) for entities
+            // Check for stop condition
 
-        // Check for stop condition
+            false // REPLACE ME
+        } else {
+            true
+        }
+
     }
 }

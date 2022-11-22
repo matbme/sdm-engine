@@ -1,4 +1,8 @@
-pub trait Event {}
+pub trait Event {
+    fn name(&self) -> &str;
+
+    fn execute(&mut self);
+}
 
 #[macro_export]
 macro_rules! EventWrapper {
@@ -15,7 +19,17 @@ macro_rules! EventWrapper {
             )*)?
         }
 
-        impl Event for $name {}
+        impl Event for $name {
+            fn name(&self) -> &str {
+                &self.name
+            }
+
+            fn execute(&mut self) {
+                if let Some(func) = self.exec {
+                    func(self);
+                }
+            }
+        }
 
         impl $name {
             pub fn new(name: &str $(,$($varname: $type),*)?) -> Self {
@@ -29,10 +43,6 @@ macro_rules! EventWrapper {
                     exec: exec,
                     $($($varname,)*)?
                 }
-            }
-
-            pub fn name(&self) -> &str {
-                &self.name
             }
         }
     };

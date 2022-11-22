@@ -5,6 +5,8 @@ pub trait Process {
 
     fn is_active(&self) -> bool;
 
+    fn start(&mut self) -> f32;
+
     fn toggle_activate(&mut self);
 }
 
@@ -37,6 +39,14 @@ macro_rules! ProcessWrapper {
 
             fn is_active(&self) -> bool {
                 self.active
+            }
+
+            fn start(&mut self) -> f32 {
+                if let Some(func) = self.on_start {
+                    func(self);
+                }
+
+                self.duration
             }
 
             fn toggle_activate(&mut self) {
