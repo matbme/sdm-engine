@@ -1,11 +1,17 @@
 pub trait Process {
     fn duration(&self) -> &f32;
 
+    fn name(&self) -> &str;
+
+    fn pid(&self) -> uuid::Uuid;
+
     fn change_duration(&mut self, duration: f32);
 
     fn is_active(&self) -> bool;
 
     fn start(&mut self) -> f32;
+
+    fn end(&mut self);
 
     fn toggle_activate(&mut self);
 }
@@ -33,6 +39,14 @@ macro_rules! ProcessWrapper {
                 &self.duration
             }
 
+            fn name(&self) -> &str {
+                &self.name
+            }
+
+            fn pid(&self) -> uuid::Uuid {
+                self.pid
+            }
+
             fn change_duration(&mut self, duration: f32) {
                 self.duration = duration;
             }
@@ -47,6 +61,12 @@ macro_rules! ProcessWrapper {
                 }
 
                 self.duration
+            }
+
+            fn end(&mut self) {
+                if let Some(func) = self.on_end {
+                    func(self);
+                }
             }
 
             fn toggle_activate(&mut self) {

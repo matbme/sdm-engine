@@ -19,21 +19,22 @@ EntitySetWrapper! {
 ProcessWrapper! {
     pub struct Abastecimento {
         carro: Box<dyn Entity>,
-        fila: Fila,
-        frentista: Frentista,
+        fila: Rc<Fila>,
+        frentista: Rc<Frentista>,
     };
 
     @on_start = |proc| {
-        if proc.fila.is_empty() {
+        if !proc.fila.is_empty() {
             if proc.frentista.allocate(1).is_ok() {
-                println!("Inicio abastecimento: {}", Scheduler::time());
+                println!("{} - Inicio abastecimento", Scheduler::time());
                 proc.carro = proc.fila.pop().unwrap();
             }
         }
     };
 
     @on_end = |proc| {
-
+        println!("{} - Fim abastecimento", Scheduler::time());
+        proc.frentista.release(1);
     };
 }
 
@@ -44,7 +45,7 @@ EventWrapper! {
     };
 
     @execute = |event| {
-        println!("Chegada: {}", Scheduler::time());
+        println!("{} - Chegada", Scheduler::time());
         if Scheduler::time() < event.time_limit {
             // Schedules new arrival in 5s
             Scheduler::instance()
@@ -61,5 +62,22 @@ EventWrapper! {
 }
 
 fn main() {
+    if let Ok(scheduler) = Scheduler::new() {
+        let frentista = Rc::new(Frentista::new("Frentista", 2));
+        let fila_posto = Rc::new(Fila::new_sized("Abastecimento", EntitySetMode::LIFO, 100));
 
+        let chegada = Chegada::new("Chegada", 100.0, fila_posto.clone());
+        let abastecimento = Abastecimento::new(
+            "Abastecimento",
+            distributions::Gaussian::gen(8.0, 2.0),
+            Box::new(Carro::new("Vazio", 0.0)),
+            fila_posto.clone(),
+            frentista.clone()
+        );
+
+        scheduler.schedule_now(Box::new(chegada));
+        scheduler.start_process_now(Box::new(abastecimento));
+
+        scheduler.simulate();
+    }
 }
