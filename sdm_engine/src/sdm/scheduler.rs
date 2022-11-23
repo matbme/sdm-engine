@@ -189,7 +189,15 @@ impl Scheduler {
     }
 
     fn process_step(&self) {
-        let (_, proc_id) = self.process_finish_events.borrow_mut().pop().unwrap();
+        let (proc_time, proc_id) = self.process_finish_events.borrow_mut().pop().unwrap();
+
+        // Set time to process time
+        if Self::time() < proc_time {
+            Self::instance().unwrap().set_time(proc_time);
+        } else if Self::time() > proc_time {
+            // Sanity check
+            panic!("Event time is in the past! Something has gone terribly wrong!")
+        }
 
         self.running_processes
             .borrow_mut()
