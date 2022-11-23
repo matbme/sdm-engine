@@ -10,12 +10,11 @@ pub enum EntitySetMode {
     FIFO,
     LIFO,
     PRIORITY,
-    NONE,
 }
 
 impl Default for EntitySetMode {
     fn default() -> Self {
-        Self::NONE
+        Self::FIFO
     }
 }
 
@@ -26,7 +25,7 @@ pub struct EntitySetContainer(pub RefCell<Vec<Box<dyn Entity>>>);
 pub trait EntitySet {
     fn mode(&self) -> EntitySetMode;
 
-    fn set_mode(&mut self, mode: EntitySetMode);
+    fn sort_container(&self);
 
     fn push(&self, entity: impl Entity + 'static);
 
@@ -61,12 +60,22 @@ macro_rules! EntitySetWrapper {
                 self.mode
             }
 
-            fn set_mode(&mut self, mode: sdm_engine::sdm::EntitySetMode) {
-                self.mode = mode;
+            fn sort_container(&self) {
+                self.container.
+                0
+                .borrow_mut()
+                .sort_by(|a, b| a.priority().cmp(&b.priority()).reverse())
             }
 
             fn push(&self, entity: impl sdm_engine::sdm::Entity + 'static) {
-                self.container.0.borrow_mut().push(Box::new(entity));
+                match self.mode {
+                    EntitySetMode::FIFO => self.container.0.borrow_mut().push(Box::new(entity)),
+                    EntitySetMode::LIFO => self.container.0.borrow_mut().insert(0, Box::new(entity)),
+                    EntitySetMode::PRIORITY => {
+                        self.container.0.borrow_mut().push(Box::new(entity));
+                        self.sort_container();
+                    },
+                }
             }
 
             fn pop(&self) -> Option<Box<dyn sdm_engine::sdm::Entity>> {

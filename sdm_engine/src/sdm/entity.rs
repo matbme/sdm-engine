@@ -8,6 +8,10 @@ pub trait Entity {
 
     fn time_since_creation(&self) -> f32;
 
+    fn set_priority(&mut self, priority: i32);
+
+    fn clear_priority(&mut self);
+
     fn add_petri_net(
         &mut self,
         petri_net: PetriNet,
@@ -44,6 +48,14 @@ macro_rules! EntityWrapper {
                 todo!()
             }
 
+            fn set_priority(&mut self, priority: i32) {
+                self.priority = Some(priority);
+            }
+
+            fn clear_priority(&mut self) {
+                self.priority = None;
+            }
+
             fn add_petri_net(&mut self, petri_net: petri_engine::net::PetriNet) -> Option<petri_engine::net::PetriNet> {
                 self.petri_net.replace(petri_net)
             }
@@ -59,6 +71,17 @@ macro_rules! EntityWrapper {
                     name: name.to_string(),
                     id: uuid::Uuid::new_v4(),
                     priority: None,
+                    petri_net: None,
+                    creation_time,
+                    $($($varname,)*)?
+                }
+            }
+
+            pub fn new_with_priority(name: &str, priority: i32, creation_time: f32 $(,$($varname: $type),*)?) -> Self {
+                Self {
+                    name: name.to_string(),
+                    id: uuid::Uuid::new_v4(),
+                    priority: Some(priority),
                     petri_net: None,
                     creation_time,
                     $($($varname,)*)?
