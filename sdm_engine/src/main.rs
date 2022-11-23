@@ -45,8 +45,8 @@ EventWrapper! {
     };
 
     @execute = |event| {
-        println!("{} - Chegada", Scheduler::time());
         if Scheduler::time() < event.time_limit {
+            println!("{} - Chegada", Scheduler::time());
             // Schedules new arrival in 5s
             Scheduler::instance()
                 .unwrap()

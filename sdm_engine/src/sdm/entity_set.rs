@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use anyhow::Result;
 use uuid::Uuid;
 
@@ -17,10 +15,6 @@ impl Default for EntitySetMode {
         Self::FIFO
     }
 }
-
-#[allow(dead_code)]
-#[derive(Default)]
-pub struct EntitySetContainer(pub RefCell<Vec<Box<dyn Entity>>>);
 
 pub trait EntitySet {
     fn mode(&self) -> EntitySetMode;
@@ -49,7 +43,7 @@ macro_rules! EntitySetWrapper {
             id: uuid::Uuid,
             mode: sdm_engine::sdm::EntitySetMode,
             max_size: Option<u32>,
-            container: sdm_engine::sdm::entity_set::EntitySetContainer,
+            container: std::cell::RefCell<Vec<Box<dyn Entity>>>,
             $($(
                 $varname: $type,
             )*)?
@@ -61,30 +55,29 @@ macro_rules! EntitySetWrapper {
             }
 
             fn sort_container(&self) {
-                self.container.
-                0
+                self.container
                 .borrow_mut()
                 .sort_by(|a, b| a.priority().cmp(&b.priority()).reverse())
             }
 
             fn push(&self, entity: impl sdm_engine::sdm::Entity + 'static) {
                 match self.mode {
-                    EntitySetMode::FIFO => self.container.0.borrow_mut().push(Box::new(entity)),
-                    EntitySetMode::LIFO => self.container.0.borrow_mut().insert(0, Box::new(entity)),
+                    EntitySetMode::FIFO => self.container.borrow_mut().push(Box::new(entity)),
+                    EntitySetMode::LIFO => self.container.borrow_mut().insert(0, Box::new(entity)),
                     EntitySetMode::PRIORITY => {
-                        self.container.0.borrow_mut().push(Box::new(entity));
+                        self.container.borrow_mut().push(Box::new(entity));
                         self.sort_container();
                     },
                 }
             }
 
             fn pop(&self) -> Option<Box<dyn sdm_engine::sdm::Entity>> {
-                self.container.0.borrow_mut().pop()
+                self.container.borrow_mut().pop()
             }
 
             fn remove(&self, id: uuid::Uuid) -> Option<Box<dyn sdm_engine::sdm::Entity>> {
                 let mut idx = None;
-                for (i, elem) in self.container.0.borrow().iter().enumerate() {
+                for (i, elem) in self.container.borrow().iter().enumerate() {
                     if elem.id() == &id {
                         idx = Some(i);
                         break;
@@ -92,19 +85,19 @@ macro_rules! EntitySetWrapper {
                 }
 
                 if let Some(i) = idx {
-                    return Some(self.container.0.borrow_mut().remove(i));
+                    return Some(self.container.borrow_mut().remove(i));
                 }
 
                 None
             }
 
             fn is_empty(&self) -> bool {
-                self.container.0.borrow().is_empty()
+                self.container.borrow().is_empty()
             }
 
             fn is_full(&self) -> bool {
                 if let Some(size) = self.max_size {
-                    self.container.0.borrow().len() == size as usize
+                    self.container.borrow().len() == size as usize
                 } else {
                     false
                 }
@@ -112,7 +105,7 @@ macro_rules! EntitySetWrapper {
 
             fn apply_for_id<F: Fn(&dyn sdm_engine::sdm::Entity) -> ()>(&self, id: uuid::Uuid, func: F) -> anyhow::Result<()> {
                 let mut idx = None;
-                for (i, elem) in self.container.0.borrow().iter().enumerate() {
+                for (i, elem) in self.container.borrow().iter().enumerate() {
                     if elem.id() == &id {
                         idx = Some(i);
                         break;
@@ -120,7 +113,7 @@ macro_rules! EntitySetWrapper {
                 }
 
                 if let Some(i) = idx {
-                    func(self.container.0.borrow_mut()[i].as_ref());
+                    func(self.container.borrow_mut()[i].as_ref());
                     Ok(())
                 } else {
                     Err(anyhow::anyhow!("No Entity matches provided ID"))
@@ -135,7 +128,7 @@ macro_rules! EntitySetWrapper {
                     id: uuid::Uuid::new_v4(),
                     mode,
                     max_size: None,
-                    container: sdm_engine::sdm::entity_set::EntitySetContainer(std::cell::RefCell::new(vec![])),
+                    container: std::cell::RefCell::new(vec![]),
                     $($($varname,)*)?
                 }
             }
@@ -146,7 +139,7 @@ macro_rules! EntitySetWrapper {
                     id: uuid::Uuid::new_v4(),
                     mode,
                     max_size: Some(max_size),
-                    container: sdm_engine::sdm::entity_set::EntitySetContainer(std::cell::RefCell::new(vec![])),
+                    container: std::cell::RefCell::new(vec![]),
                     $($($varname,)*)?
                 }
             }

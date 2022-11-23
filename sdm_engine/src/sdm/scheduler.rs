@@ -7,13 +7,10 @@ use uuid::Uuid;
 
 static SCHEDULER_INSTANCE: AtomicPtr<Scheduler> = AtomicPtr::new(std::ptr::null_mut());
 
-pub struct EventQueue(pub RefCell<Vec<(f32, Box<dyn Event>)>>);
-pub struct ProcessQueue(pub RefCell<Vec<(f32, Box<dyn Process>)>>);
-
 pub struct Scheduler {
     time: f32,                                                   // Simulation time
-    event_queue: EventQueue,                                     // Future events
-    process_queue: ProcessQueue,                                 // Future processes
+    event_queue: RefCell<Vec<(f32, Box<dyn Event>)>>,            // Future events
+    process_queue: RefCell<Vec<(f32, Box<dyn Process>)>>,        // Future processes
     running_processes: RefCell<HashMap<Uuid, Box<dyn Process>>>, // Process to run every cicle
     process_finish_events: RefCell<Vec<(f32, Uuid)>>,            // Processes with on_end to run
 }
@@ -33,8 +30,8 @@ impl Scheduler {
         if !Self::instanciated() {
             let instance = Box::new(Self {
                 time: 0f32,
-                event_queue: EventQueue(RefCell::new(vec![])),
-                process_queue: ProcessQueue(RefCell::new(vec![])),
+                event_queue: RefCell::new(vec![]),
+                process_queue: RefCell::new(vec![]),
                 running_processes: RefCell::new(HashMap::new()),
                 process_finish_events: RefCell::new(vec![]),
             });
@@ -77,14 +74,12 @@ impl Scheduler {
 
     fn sort_event_queue(&self) {
         self.event_queue
-            .0
             .borrow_mut()
             .sort_by(|a, b| a.0.total_cmp(&b.0).reverse())
     }
 
     fn sort_process_queue(&self) {
         self.process_queue
-            .0
             .borrow_mut()
             .sort_by(|a, b| a.0.total_cmp(&b.0).reverse())
     }
@@ -96,12 +91,11 @@ impl Scheduler {
     }
 
     pub fn schedule_now(&self, event: Box<dyn Event>) {
-        self.event_queue.0.borrow_mut().push((Self::time(), event));
+        self.event_queue.borrow_mut().push((Self::time(), event));
     }
 
     pub fn schedule_in(&self, event: Box<dyn Event>, time_to_event: f32) {
         self.event_queue
-            .0
             .borrow_mut()
             .push((Self::time() + time_to_event, event));
 
@@ -109,7 +103,7 @@ impl Scheduler {
     }
 
     pub fn schedule_at(&self, event: Box<dyn Event>, schedule_time: f32) {
-        self.event_queue.0.borrow_mut().push((schedule_time, event));
+        self.event_queue.borrow_mut().push((schedule_time, event));
 
         self.sort_event_queue();
     }
@@ -122,7 +116,6 @@ impl Scheduler {
 
     pub fn start_process_in(&self, process: Box<dyn Process>, time_to_process: f32) {
         self.process_queue
-            .0
             .borrow_mut()
             .push((Self::time() + time_to_process, process));
 
@@ -131,7 +124,6 @@ impl Scheduler {
 
     pub fn start_process_at(&self, process: Box<dyn Process>, schedule_time: f32) {
         self.process_queue
-            .0
             .borrow_mut()
             .push((schedule_time, process));
 
@@ -141,9 +133,9 @@ impl Scheduler {
     /// Check for processes that may be scheduled to start and start them
     fn check_process_queue(&self, future_time: &f32) {
         loop {
-            if let Some((schedule_time, _)) = self.process_queue.0.borrow().last() {
+            if let Some((schedule_time, _)) = self.process_queue.borrow().last() {
                 if schedule_time <= future_time {
-                    let proc = self.process_queue.0.borrow_mut().pop().unwrap().1;
+                    let proc = self.process_queue.borrow_mut().pop().unwrap().1;
                     println!("{} - Starting process \"{}\"", schedule_time, proc.name());
                     self.running_processes.borrow_mut().insert(proc.pid(), proc);
                 } else {
@@ -157,7 +149,7 @@ impl Scheduler {
 
     fn event_step(&self) -> bool {
         // Get first item from FEL
-        let event = self.event_queue.0.borrow_mut().pop();
+        let event = self.event_queue.borrow_mut().pop();
 
         if let Some(mut event) = event {
             // Set time to event time
@@ -182,7 +174,7 @@ impl Scheduler {
             }
 
             // Check for stop condition
-            self.event_queue.0.borrow().is_empty()
+            self.event_queue.borrow().is_empty()
         } else {
             true
         }
@@ -215,7 +207,7 @@ impl Scheduler {
             None => None,
         };
 
-        let event_time = match self.event_queue.0.borrow().last() {
+        let event_time = match self.event_queue.borrow().last() {
             Some(event) => Some(event.0),
             None => None,
         };
@@ -228,7 +220,7 @@ impl Scheduler {
                     false
                 } else {
                     self.check_process_queue(&event_time);
-                    self.event_step()
+                    self.event_step() & !self.process_finish_events.borrow().is_empty()
                 }
             } else {
                 self.check_process_queue(&proc_time);
@@ -236,8 +228,8 @@ impl Scheduler {
                 false
             }
         } else {
-            self.check_process_queue(&self.event_queue.0.borrow().last().unwrap().0);
-            self.event_step()
+            self.check_process_queue(&self.event_queue.borrow().last().unwrap().0);
+            self.event_step() & !self.process_finish_events.borrow().is_empty()
         }
     }
 
@@ -248,7 +240,7 @@ impl Scheduler {
             println!(
                 "{} - Step complete. Events left in FEL: {}",
                 self.time,
-                self.event_queue.0.borrow().len()
+                self.event_queue.borrow().len()
             );
             println!("--------------------------------------------------");
         }
