@@ -9,7 +9,6 @@ macro_rules! EventWrapper {
     ( $vis:vis struct $name:ident $({ $($varname:ident : $type:ty),* $(,)? })? ;
       $( @execute = |$exec_var:ident| $exec_code:block ; )?
     ) => {
-        #[derive(Default)]
         $vis struct $name {
             name: String,
             id: uuid::Uuid,

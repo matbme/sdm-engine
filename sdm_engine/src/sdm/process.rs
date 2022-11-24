@@ -1,11 +1,9 @@
 pub trait Process {
-    fn duration(&self) -> &f32;
+    fn duration(&self) -> f32;
 
     fn name(&self) -> &str;
 
     fn pid(&self) -> uuid::Uuid;
-
-    fn change_duration(&mut self, duration: f32);
 
     fn is_active(&self) -> bool;
 
@@ -25,7 +23,7 @@ macro_rules! ProcessWrapper {
         $vis struct $name {
             name: String,
             pid: uuid::Uuid,
-            duration: f32,
+            duration: Box<dyn sdm::Distrib>,
             active: bool,
             on_start: Option<fn(&mut Self) -> ()>,
             on_end: Option<fn(&mut Self) -> ()>,
@@ -35,8 +33,8 @@ macro_rules! ProcessWrapper {
         }
 
         impl sdm_engine::sdm::Process for $name {
-            fn duration(&self) -> &f32 {
-                &self.duration
+            fn duration(&self) -> f32 {
+                self.duration.gen()
             }
 
             fn name(&self) -> &str {
@@ -45,10 +43,6 @@ macro_rules! ProcessWrapper {
 
             fn pid(&self) -> uuid::Uuid {
                 self.pid
-            }
-
-            fn change_duration(&mut self, duration: f32) {
-                self.duration = duration;
             }
 
             fn is_active(&self) -> bool {
@@ -60,7 +54,7 @@ macro_rules! ProcessWrapper {
                     func(self);
                 }
 
-                self.duration
+                self.duration()
             }
 
             fn end(&mut self) {
@@ -75,7 +69,7 @@ macro_rules! ProcessWrapper {
         }
 
         impl $name {
-            pub fn new(name: &str, duration: f32 $(,$($varname: $type),*)?) -> Self {
+            pub fn new(name: &str, duration: impl sdm::Distrib + 'static $(,$($varname: $type),*)?) -> Self {
                 let mut on_start: Option<fn(&mut Self) -> ()> = None;
                 let mut on_end: Option<fn(&mut Self) -> ()> = None;
 
@@ -85,7 +79,7 @@ macro_rules! ProcessWrapper {
                 Self {
                     name: name.to_string(),
                     pid: uuid::Uuid::new_v4(),
-                    duration,
+                    duration: Box::new(duration),
                     active: false,
                     on_start: on_start,
                     on_end: on_end,

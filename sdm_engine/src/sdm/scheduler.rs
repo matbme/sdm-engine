@@ -1,18 +1,24 @@
-use super::{Event, Process};
+use super::{EntitySet, Event, Process, Resource};
 use anyhow::{anyhow, Result};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use uuid::Uuid;
+
+pub const ANALYTICS_REFRESH: f32 = 1.0;
 
 static SCHEDULER_INSTANCE: AtomicPtr<Scheduler> = AtomicPtr::new(std::ptr::null_mut());
 
 pub struct Scheduler {
     time: f32,                                                   // Simulation time
-    event_queue: RefCell<Vec<(f32, Box<dyn Event>)>>,            // Future events
-    process_queue: RefCell<Vec<(f32, Box<dyn Process>)>>,        // Future processes
+    last_analytics: f32, // Time last analytics was performed
+    event_queue: RefCell<Vec<(f32, Box<dyn Event>)>>, // Future events
+    process_queue: RefCell<Vec<(f32, Box<dyn Process>)>>, // Future processes
     running_processes: RefCell<HashMap<Uuid, Box<dyn Process>>>, // Process to run every cicle
-    process_finish_events: RefCell<Vec<(f32, Uuid)>>,            // Processes with on_end to run
+    process_finish_events: RefCell<Vec<(f32, Uuid)>>, // Processes with on_end to run
+    entity_sets: RefCell<Vec<Rc<dyn EntitySet>>>, // Managed EntitySets
+    resources: RefCell<Vec<Rc<dyn Resource>>>, // Managed Resources
 }
 
 impl Drop for Scheduler {
@@ -30,10 +36,13 @@ impl Scheduler {
         if !Self::instanciated() {
             let instance = Box::new(Self {
                 time: 0f32,
+                last_analytics: 0f32,
                 event_queue: RefCell::new(vec![]),
                 process_queue: RefCell::new(vec![]),
                 running_processes: RefCell::new(HashMap::new()),
                 process_finish_events: RefCell::new(vec![]),
+                entity_sets: RefCell::new(vec![]),
+                resources: RefCell::new(vec![]),
             });
 
             SCHEDULER_INSTANCE.store(Box::into_raw(instance), Ordering::Relaxed);
@@ -130,6 +139,18 @@ impl Scheduler {
         self.sort_process_queue()
     }
 
+    pub fn manage_entity_set(&self, entity_set: impl EntitySet + 'static) -> Rc<dyn EntitySet> {
+        self.entity_sets.borrow_mut().push(Rc::new(entity_set));
+
+        self.entity_sets.borrow().last().unwrap().clone()
+    }
+
+    pub fn manage_resource(&self, resource: impl Resource + 'static) -> Rc<dyn Resource> {
+        self.resources.borrow_mut().push(Rc::new(resource));
+
+        self.resources.borrow().last().unwrap().clone()
+    }
+
     /// Check for processes that may be scheduled to start and start them
     fn check_process_queue(&self, future_time: &f32) {
         loop {
@@ -212,25 +233,44 @@ impl Scheduler {
             None => None,
         };
 
+        let closest = self.time
+            + f32::min(
+                proc_time.unwrap_or(f32::MAX),
+                event_time.unwrap_or(f32::MAX),
+            );
+        if self.last_analytics + closest >= self.time + ANALYTICS_REFRESH {
+            // Run analytics on `EntitySet`s and `Resource`s
+            for entity_set in self.entity_sets.borrow().iter() {
+                entity_set.update_analytics();
+            }
+
+            for resource in self.resources.borrow().iter() {
+                resource.update_analytics();
+            }
+        }
+
+        let ret;
         if let Some(proc_time) = proc_time {
             if let Some(event_time) = event_time {
                 if proc_time <= event_time {
                     self.check_process_queue(&proc_time);
                     self.process_step();
-                    false
+                    ret = false;
                 } else {
                     self.check_process_queue(&event_time);
-                    self.event_step() & !self.process_finish_events.borrow().is_empty()
+                    ret = self.event_step() & !self.process_finish_events.borrow().is_empty();
                 }
             } else {
                 self.check_process_queue(&proc_time);
                 self.process_step();
-                false
+                ret = false;
             }
         } else {
             self.check_process_queue(&self.event_queue.borrow().last().unwrap().0);
-            self.event_step() & !self.process_finish_events.borrow().is_empty()
+            ret = self.event_step() & !self.process_finish_events.borrow().is_empty();
         }
+
+        return ret;
     }
 
     pub fn simulate(&self) {
