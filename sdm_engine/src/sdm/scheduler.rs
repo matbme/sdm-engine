@@ -232,6 +232,7 @@ impl Scheduler {
         println!("Resources:");
         for resource in self.resources.borrow().iter() {
             println!("- {}:", resource.name());
+            println!("  - Total: {}", resource.quantity());
             println!("  - Currently allocated: {}", resource.n_allocated());
             println!("  - Allocation rate: {:.2}", resource.allocation_rate());
             println!("  - Average allocation: {:.2}", resource.average_allocation());

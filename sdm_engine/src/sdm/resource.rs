@@ -15,6 +15,8 @@ pub trait Resource: Downcast + std::fmt::Debug {
 
     fn name(&self) -> &str;
 
+    fn quantity(&self) -> i32;
+
     fn update_analytics(&self);
 
     fn allocation_rate(&self) -> f32;
@@ -52,11 +54,11 @@ macro_rules! ResourceWrapper {
             }
 
             fn release(&self, quantity: i32) -> anyhow::Result<()> {
-                if self.quantity < *self.tokens.0.borrow() + quantity {
+                if  *self.tokens.0.borrow() + quantity <= self.quantity  {
                     *self.tokens.0.borrow_mut() += quantity;
                     Ok(())
                 } else {
-                    Err(anyhow::anyhow!("Releasing too many resources."))
+                    Err(anyhow::anyhow!("Releasing too many resources. Have {}", *self.tokens.0.borrow()))
                 }
             }
 
@@ -66,6 +68,10 @@ macro_rules! ResourceWrapper {
 
             fn name(&self) -> &str {
                 &self.name
+            }
+
+            fn quantity(&self) -> i32 {
+                self.quantity
             }
 
             fn update_analytics(&self) {

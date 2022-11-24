@@ -95,7 +95,10 @@ ProcessWrapper! {
     @on_end = |proc| {
         if proc.did_allocate.borrow_mut().remove(0) {
             println!("{:.2} - Client done ordering", Scheduler::time());
-            proc.attendants.release(1);
+            match proc.attendants.release(1) {
+                Ok(()) => println!("Attendant deallocated"),
+                Err(_) => println!("Error")
+            }
             let client = proc.ordering_clients.pop().unwrap().downcast::<Client>().unwrap();
 
             proc.food_prep_queue.push(Box::new(
@@ -150,7 +153,10 @@ ProcessWrapper! {
     @on_end = |proc| {
         if proc.did_allocate.borrow_mut().remove(0) {
             println!("{:.2} - Food prepared", Scheduler::time());
-            proc.cooks.release(1);
+            match proc.cooks.release(1) {
+                Ok(()) => println!("Cook deallocated"),
+                Err(_) => println!("Error")
+            }
             let mut food = proc.food_in_preparation.pop().unwrap().downcast::<Food>().unwrap();
             food.done = true;
             proc.prepared_food_queue.push(food as Box<dyn Entity>);
@@ -186,34 +192,34 @@ ProcessWrapper! {
             let food = proc.prepared_food_queue.pop().unwrap().downcast::<Food>().unwrap();
 
             // Look for client
-            for (i, client) in proc.counter_seats.downcast_ref::<TableSeats>().unwrap().clients.borrow_mut().iter_mut().enumerate() {
+            for client in proc.counter_seats.downcast_ref::<TableSeats>().unwrap().clients.borrow_mut().iter_mut() {
                 if client.id() == &food.client_id {
                     client.downcast_mut::<Client>().unwrap().served = true;
                     Scheduler::instance().unwrap().schedule_in(
-                        Box::new(Leave::new("Client leave", i, proc.counter_seats.clone())),
-                        10.0
+                        Box::new(Leave::new("Client leave", client.id().clone(), proc.counter_seats.clone())),
+                        sdm::distributions::Uniform::gen(10.0, 15.0)
                     );
                     return
                 }
             }
 
-            for (i, client) in proc.tables_for_2.downcast_ref::<TableSeats>().unwrap().clients.borrow_mut().iter_mut().enumerate() {
+            for client in proc.tables_for_2.downcast_ref::<TableSeats>().unwrap().clients.borrow_mut().iter_mut() {
                 if client.id() == &food.client_id {
                     client.downcast_mut::<Client>().unwrap().served = true;
                     Scheduler::instance().unwrap().schedule_in(
-                        Box::new(Leave::new("Client leave", i, proc.tables_for_2.clone())),
-                        10.0
+                        Box::new(Leave::new("Client leave", client.id().clone(), proc.tables_for_2.clone())),
+                        sdm::distributions::Uniform::gen(10.0, 15.0)
                     );
                     return
                 }
             }
 
-            for (i, client) in proc.tables_for_4.downcast_ref::<TableSeats>().unwrap().clients.borrow_mut().iter_mut().enumerate() {
+            for client in proc.tables_for_4.downcast_ref::<TableSeats>().unwrap().clients.borrow_mut().iter_mut() {
                 if client.id() == &food.client_id {
                     client.downcast_mut::<Client>().unwrap().served = true;
                     Scheduler::instance().unwrap().schedule_in(
-                        Box::new(Leave::new("Client leave", i, proc.tables_for_4.clone())),
-                        10.0
+                        Box::new(Leave::new("Client leave", client.id().clone(), proc.tables_for_4.clone())),
+                        sdm::distributions::Uniform::gen(10.0, 15.0)
                     );
                     return
                 }
@@ -292,14 +298,25 @@ EntitySetWrapper! {
 
 EventWrapper! {
     pub struct Leave {
-        client_pos: usize,
+        client_id: uuid::Uuid,
         seat: Rc<dyn Resource>,
     };
 
     @execute = |event| {
         println!("{:.2} - Client leaving", Scheduler::time());
-        event.seat.downcast_ref::<TableSeats>().unwrap().clients.borrow_mut().remove(event.client_pos);
-        event.seat.release(1);
+
+        let mut client_pos = 0;
+        for (i, client) in event.seat.downcast_ref::<TableSeats>().unwrap().clients.borrow().iter().enumerate() {
+            if client.id() == &event.client_id {
+                client_pos = i;
+            }
+        }
+
+        event.seat.downcast_ref::<TableSeats>().unwrap().clients.borrow_mut().remove(client_pos);
+        match event.seat.release(1) {
+            Ok(()) => println!("Seat deallocated"),
+            Err(_) => println!("Error")
+        }
     };
 }
 
