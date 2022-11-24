@@ -12,7 +12,7 @@ static SCHEDULER_INSTANCE: AtomicPtr<Scheduler> = AtomicPtr::new(std::ptr::null_
 
 pub struct Scheduler {
     time: f32,                                                   // Simulation time
-    last_analytics: f32, // Time last analytics was performed
+    last_analytics: RefCell<f32>, // Time last analytics was performed
     event_queue: RefCell<Vec<(f32, Box<dyn Event>)>>, // Future events
     process_queue: RefCell<Vec<(f32, Box<dyn Process>)>>, // Future processes
     running_processes: RefCell<HashMap<Uuid, Box<dyn Process>>>, // Process to run every cicle
@@ -36,7 +36,7 @@ impl Scheduler {
         if !Self::instanciated() {
             let instance = Box::new(Self {
                 time: 0f32,
-                last_analytics: 0f32,
+                last_analytics: RefCell::new(0f32),
                 event_queue: RefCell::new(vec![]),
                 process_queue: RefCell::new(vec![]),
                 running_processes: RefCell::new(HashMap::new()),
@@ -168,7 +168,7 @@ impl Scheduler {
         }
     }
 
-    fn event_step(&self) -> bool {
+    fn event_step(&self){
         // Get first item from FEL
         let event = self.event_queue.borrow_mut().pop();
 
@@ -193,11 +193,6 @@ impl Scheduler {
 
                 self.sort_process_finish_event_queue();
             }
-
-            // Check for stop condition
-            self.event_queue.borrow().is_empty()
-        } else {
-            true
         }
     }
 
@@ -209,7 +204,7 @@ impl Scheduler {
             Self::instance().unwrap().set_time(proc_time);
         } else if Self::time() > proc_time {
             // Sanity check
-            panic!("Event time is in the past! Something has gone terribly wrong!")
+            panic!("Process time is in the past! Something has gone terribly wrong!")
         }
 
         self.running_processes
@@ -233,12 +228,15 @@ impl Scheduler {
             None => None,
         };
 
-        let closest = self.time
-            + f32::min(
-                proc_time.unwrap_or(f32::MAX),
-                event_time.unwrap_or(f32::MAX),
-            );
-        if self.last_analytics + closest >= self.time + ANALYTICS_REFRESH {
+        let closest = f32::min(
+            proc_time.unwrap_or(f32::NAN),
+            event_time.unwrap_or(f32::NAN),
+        );
+        while closest >= *self.last_analytics.borrow() + ANALYTICS_REFRESH {
+            Self::instance()
+                .unwrap()
+                .set_time(*self.last_analytics.borrow() + ANALYTICS_REFRESH);
+
             // Run analytics on `EntitySet`s and `Resource`s
             for entity_set in self.entity_sets.borrow().iter() {
                 entity_set.update_analytics();
@@ -247,42 +245,48 @@ impl Scheduler {
             for resource in self.resources.borrow().iter() {
                 resource.update_analytics();
             }
+
+            *self.last_analytics.borrow_mut() = self.time;
         }
 
-        let ret;
         if let Some(proc_time) = proc_time {
             if let Some(event_time) = event_time {
                 if proc_time <= event_time {
                     self.check_process_queue(&proc_time);
                     self.process_step();
-                    ret = false;
                 } else {
                     self.check_process_queue(&event_time);
-                    ret = self.event_step() & !self.process_finish_events.borrow().is_empty();
+                    self.event_step()
                 }
             } else {
                 self.check_process_queue(&proc_time);
                 self.process_step();
-                ret = false;
             }
         } else {
             self.check_process_queue(&self.event_queue.borrow().last().unwrap().0);
-            ret = self.event_step() & !self.process_finish_events.borrow().is_empty();
+            self.event_step();
         }
 
-        return ret;
+        self.event_queue.borrow().is_empty() & self.process_finish_events.borrow().is_empty()
     }
 
     pub fn simulate(&self) {
-        while !self.simulate_one_step() {
+        loop {
+            let stop = self.simulate_one_step();
+
             println!("--------------------------------------------------");
             std::thread::sleep(std::time::Duration::from_secs_f32(0.5));
             println!(
-                "{} - Step complete. Events left in FEL: {}",
+                "{} - Step complete. Events left in FEL: {}. Scheduled process callbacks: {}",
                 self.time,
-                self.event_queue.borrow().len()
+                self.event_queue.borrow().len(),
+                self.process_finish_events.borrow().len()
             );
             println!("--------------------------------------------------");
+
+            if stop {
+                break;
+            }
         }
     }
 }
