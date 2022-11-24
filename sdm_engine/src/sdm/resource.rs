@@ -1,14 +1,15 @@
+use downcast_rs::{Downcast, impl_downcast};
 use std::cell::RefCell;
 
 use anyhow::Result;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ResourceInner(pub RefCell<i32>);
 
-pub trait Resource {
+pub trait Resource: Downcast + std::fmt::Debug {
     fn allocate(&self, quantity: i32) -> Result<()>;
 
-    fn release(&self, quantity: i32);
+    fn release(&self, quantity: i32) -> Result<()>;
 
     fn n_allocated(&self) -> i32;
 
@@ -21,11 +22,12 @@ pub trait Resource {
     fn average_allocation(&self) -> f32;
 }
 
+impl_downcast!(Resource);
 
 #[macro_export]
 macro_rules! ResourceWrapper {
-    ( $vis:vis struct $name:ident $({ $($varname:ident : $type:ty),* $(,)? })? ; ) => {
-        #[derive(Default)]
+    ( $vis:vis struct $name:ident $({ $($varvis:vis $varname:ident : $type:ty),* $(,)? })? ; ) => {
+        #[derive(Debug, Default)]
         $vis struct $name {
             name: String,
             id: uuid::Uuid,
@@ -34,7 +36,7 @@ macro_rules! ResourceWrapper {
             times_allocated: std::cell::RefCell<u32>,
             tokens: sdm_engine::sdm::resource::ResourceInner,
             $($(
-                $varname: $type,
+                $varvis $varname: $type,
             )*)?
         }
 
@@ -49,8 +51,13 @@ macro_rules! ResourceWrapper {
                 }
             }
 
-            fn release(&self, quantity: i32) {
-                *self.tokens.0.borrow_mut() += quantity;
+            fn release(&self, quantity: i32) -> anyhow::Result<()> {
+                if self.quantity < *self.tokens.0.borrow() + quantity {
+                    *self.tokens.0.borrow_mut() += quantity;
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("Releasing too many resources."))
+                }
             }
 
             fn n_allocated(&self) -> i32 {
@@ -78,7 +85,7 @@ macro_rules! ResourceWrapper {
         }
 
         impl $name {
-            pub fn new(name: &str, quantity: i32) -> Self {
+            pub fn new(name: &str, quantity: i32 $(,$($varname: $type),*)?) -> Self {
                 Self {
                     name: name.to_string(),
                     id: uuid::Uuid::new_v4(),

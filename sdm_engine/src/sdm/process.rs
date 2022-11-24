@@ -28,7 +28,7 @@ macro_rules! ProcessWrapper {
             on_start: Option<fn(&mut Self) -> ()>,
             on_end: Option<fn(&mut Self) -> ()>,
             $($(
-                $varname: $type,
+                $varvis $varname: $type,
             )*)?
         }
 

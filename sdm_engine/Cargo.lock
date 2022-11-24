@@ -64,15 +64,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "derivative"
-version = "2.2.0"
+name = "downcast-rs"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
+checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
 name = "getrandom"
@@ -154,11 +149,10 @@ dependencies = [
 [[package]]
 name = "petri_engine"
 version = "0.1.0"
-source = "git+https://github.com/matbme/PetriEngine#eadde3bb1c5385ba07c9a16c084fbd9bbeb768e4"
+source = "git+https://github.com/matbme/PetriEngine?branch=post_ga_improvements#54eebb84fe6d8adb6d5e0917665d3ca1e896f351"
 dependencies = [
  "comfy-table",
  "crossterm",
- "derivative",
  "rand",
  "uuid",
 ]
@@ -243,6 +237,7 @@ name = "sdm_engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "downcast-rs",
  "petri_engine",
  "rand",
  "uuid",

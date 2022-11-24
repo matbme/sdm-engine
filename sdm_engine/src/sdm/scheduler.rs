@@ -208,7 +208,15 @@ impl Scheduler {
             Self::instance().unwrap().set_time(proc_time);
         } else if Self::time() > proc_time {
             // Sanity check
-            panic!("Process time is in the past! Something has gone terribly wrong!")
+            panic!(
+                "Process '{}' time is in the past ({})! Something has gone terribly wrong!",
+                self.running_processes
+                    .borrow_mut()
+                    .get_mut(&proc_id)
+                    .unwrap()
+                    .name(),
+                proc_time
+            )
         }
 
         self.running_processes

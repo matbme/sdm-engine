@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-petri_engine = { git = "https://github.com/matbme/PetriEngine" }
+petri_engine = { git = "https://github.com/matbme/PetriEngine", branch = "post_ga_improvements" }
 anyhow = "1.0"
 rand = "0.8.5"
+downcast-rs = "1.2.0"
 
 [dependencies.uuid]
 version = "1.2.1"

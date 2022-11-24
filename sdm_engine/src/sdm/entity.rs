@@ -1,7 +1,8 @@
+use downcast_rs::{Downcast, impl_downcast};
 use uuid::Uuid;
 use petri_engine::net::PetriNet;
 
-pub trait Entity {
+pub trait Entity: Downcast + std::fmt::Debug {
     fn id(&self) -> &Uuid;
 
     fn priority(&self) -> &Option<i32>;
@@ -20,10 +21,12 @@ pub trait Entity {
     fn petri_net(&self) -> &Option<PetriNet>;
 }
 
+impl_downcast!(Entity);
+
 #[macro_export]
 macro_rules! EntityWrapper {
-    ( $vis:vis struct $name:ident $({ $($varname:ident : $type:ty),* $(,)? })? ; ) => {
-        #[derive(Default)]
+    ( $vis:vis struct $name:ident $({ $($varvis:vis $varname:ident : $type:ty),* $(,)? })? ; ) => {
+        #[derive(Debug, Default)]
         $vis struct $name {
             name: String,
             id: uuid::Uuid,
@@ -31,7 +34,7 @@ macro_rules! EntityWrapper {
             petri_net: Option<petri_engine::net::PetriNet>,
             creation_time: f32,
             $($(
-                $varname: $type,
+                $varvis $varname: $type,
             )*)?
         }
 
@@ -45,7 +48,7 @@ macro_rules! EntityWrapper {
             }
 
             fn time_since_creation(&self) -> f32 {
-                todo!()
+                sdm_engine::sdm::Scheduler::time() - self.creation_time
             }
 
             fn set_priority(&mut self, priority: i32) {
