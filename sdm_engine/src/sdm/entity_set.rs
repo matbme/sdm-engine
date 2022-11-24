@@ -27,6 +27,8 @@ pub trait EntitySet {
 
     fn remove(&self, id: Uuid) -> Option<Box<dyn Entity>>;
 
+    fn name(&self) -> &str;
+
     fn is_empty(&self) -> bool;
 
     fn is_full(&self) -> bool;
@@ -58,6 +60,8 @@ macro_rules! EntitySetWrapper {
             mode: sdm_engine::sdm::EntitySetMode,
             max_size: Option<usize>,
             average_size_sum: std::cell::RefCell<u32>,
+            average_size_sum_count: std::cell::RefCell<u32>,
+            removed_time_in_set: std::cell::RefCell<Vec<f32>>,
             max_time_in_set: std::cell::RefCell<f32>,
             container: std::cell::RefCell<Vec<(f32, Box<dyn Entity>)>>,
             $($(
@@ -90,10 +94,16 @@ macro_rules! EntitySetWrapper {
 
             fn pop(&self) -> Option<Box<dyn sdm_engine::sdm::Entity>> {
                 if let Some((time, value)) = self.container.borrow_mut().pop() {
+                    let s_time = sdm_engine::sdm::Scheduler::time();
+                    self.removed_time_in_set.borrow_mut().push(s_time - time);
                     Some(value)
                 } else {
                     None
                 }
+            }
+
+            fn name(&self) -> &str {
+                &self.name
             }
 
             fn remove(&self, id: uuid::Uuid) -> Option<Box<dyn sdm_engine::sdm::Entity>> {
@@ -106,7 +116,11 @@ macro_rules! EntitySetWrapper {
                 }
 
                 if let Some(i) = idx {
-                    let (_, removed) = self.container.borrow_mut().remove(i);
+                    let (time, removed) = self.container.borrow_mut().remove(i);
+
+                    let s_time = sdm_engine::sdm::Scheduler::time();
+                    self.removed_time_in_set.borrow_mut().push(s_time - time);
+
                     return Some(removed);
                 }
 
@@ -147,8 +161,7 @@ macro_rules! EntitySetWrapper {
             }
 
             fn average_size(&self) -> f32 {
-                let avg_size = self.average_size_sum.borrow().clone();
-                avg_size as f32 / (sdm_engine::sdm::Scheduler::time() / sdm_engine::sdm::scheduler::ANALYTICS_REFRESH)
+                *self.average_size_sum.borrow() as f32 / *self.average_size_sum_count.borrow() as f32
             }
 
             fn max_size(&self) -> Option<usize> {
@@ -158,23 +171,30 @@ macro_rules! EntitySetWrapper {
             fn update_analytics(&self) {
                 // Average size
                 *self.average_size_sum.borrow_mut() += self.size() as u32;
+                *self.average_size_sum_count.borrow_mut() += 1;
 
                 // Max time in set
                 for (time_added, _) in self.container.borrow().iter() {
-                    if *self.max_time_in_set.borrow() > sdm_engine::sdm::Scheduler::time() - time_added {
+                    if *self.max_time_in_set.borrow() < sdm_engine::sdm::Scheduler::time() - time_added {
                         *self.max_time_in_set.borrow_mut() = sdm_engine::sdm::Scheduler::time() - time_added;
                     }
                 }
             }
 
             fn average_time_in_set(&self) -> f32 {
-                let mut average = 0f32;
+                let mut sum = 0f32;
 
-                for (time_added, _) in self.container.borrow().iter() {
-                    average += (sdm_engine::sdm::Scheduler::time() - time_added);
+                // Items previously removed
+                for time in self.removed_time_in_set.borrow().iter() {
+                    sum += time;
                 }
 
-                average
+                // Items present
+                for (time_added, _) in self.container.borrow().iter() {
+                    sum += (sdm_engine::sdm::Scheduler::time() - time_added);
+                }
+
+                sum / (self.removed_time_in_set.borrow().len() + self.container.borrow().len()) as f32
             }
 
             fn max_time_in_set(&self) -> f32 {
@@ -190,6 +210,8 @@ macro_rules! EntitySetWrapper {
                     mode,
                     max_size: None,
                     average_size_sum: std::cell::RefCell::new(0u32),
+                    average_size_sum_count: std::cell::RefCell::new(0u32),
+                    removed_time_in_set: std::cell::RefCell::new(vec![]),
                     max_time_in_set: std::cell::RefCell::new(0f32),
                     container: std::cell::RefCell::new(vec![]),
                     $($($varname,)*)?
@@ -203,6 +225,8 @@ macro_rules! EntitySetWrapper {
                     mode,
                     max_size: Some(max_size),
                     average_size_sum: std::cell::RefCell::new(0u32),
+                    average_size_sum_count: std::cell::RefCell::new(0u32),
+                    removed_time_in_set: std::cell::RefCell::new(vec![]),
                     max_time_in_set: std::cell::RefCell::new(0f32),
                     container: std::cell::RefCell::new(vec![]),
                     $($($varname,)*)?

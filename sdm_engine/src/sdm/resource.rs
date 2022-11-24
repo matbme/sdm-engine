@@ -10,6 +10,10 @@ pub trait Resource {
 
     fn release(&self, quantity: i32);
 
+    fn n_allocated(&self) -> i32;
+
+    fn name(&self) -> &str;
+
     fn update_analytics(&self);
 
     fn allocation_rate(&self) -> f32;
@@ -47,6 +51,14 @@ macro_rules! ResourceWrapper {
 
             fn release(&self, quantity: i32) {
                 *self.tokens.0.borrow_mut() += quantity;
+            }
+
+            fn n_allocated(&self) -> i32 {
+                self.quantity - *self.tokens.0.borrow()
+            }
+
+            fn name(&self) -> &str {
+                &self.name
             }
 
             fn update_analytics(&self) {

@@ -6,19 +6,20 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use uuid::Uuid;
 
-pub const ANALYTICS_REFRESH: f32 = 1.0;
+pub const ANALYTICS_REFRESH: f32 = 1.0; // Update analytics every second
+pub const ANALYTICS_PRINT_TIME: f32 = 10.0; // Print analytics every 10 seconds
 
 static SCHEDULER_INSTANCE: AtomicPtr<Scheduler> = AtomicPtr::new(std::ptr::null_mut());
 
 pub struct Scheduler {
     time: f32,                                                   // Simulation time
-    last_analytics: RefCell<f32>, // Time last analytics was performed
-    event_queue: RefCell<Vec<(f32, Box<dyn Event>)>>, // Future events
-    process_queue: RefCell<Vec<(f32, Box<dyn Process>)>>, // Future processes
+    last_analytics: RefCell<f32>,                                // Time last analytics was run
+    event_queue: RefCell<Vec<(f32, Box<dyn Event>)>>,            // Future events
+    process_queue: RefCell<Vec<(f32, Box<dyn Process>)>>,        // Future processes
     running_processes: RefCell<HashMap<Uuid, Box<dyn Process>>>, // Process to run every cicle
-    process_finish_events: RefCell<Vec<(f32, Uuid)>>, // Processes with on_end to run
-    entity_sets: RefCell<Vec<Rc<dyn EntitySet>>>, // Managed EntitySets
-    resources: RefCell<Vec<Rc<dyn Resource>>>, // Managed Resources
+    process_finish_events: RefCell<Vec<(f32, Uuid)>>,            // Processes with on_end to run
+    entity_sets: RefCell<Vec<Rc<dyn EntitySet>>>,                // Managed EntitySets
+    resources: RefCell<Vec<Rc<dyn Resource>>>,                   // Managed Resources
 }
 
 impl Drop for Scheduler {
@@ -49,7 +50,10 @@ impl Scheduler {
 
             Self::instance()
         } else {
-            Err(anyhow!("There is already another instance of Scheduler, please drop it before creating a new scheduler instance"))
+            Err(anyhow!(
+                "There is already another instance of Scheduler, please drop it before
+                creating a new scheduler instance"
+            ))
         }
     }
 
@@ -168,7 +172,7 @@ impl Scheduler {
         }
     }
 
-    fn event_step(&self){
+    fn event_step(&self) {
         // Get first item from FEL
         let event = self.event_queue.borrow_mut().pop();
 
@@ -214,6 +218,29 @@ impl Scheduler {
             .end();
     }
 
+    pub fn print_analytics(&self) {
+        println!("+++++++++++++++ {:3.2} - LOG +++++++++++++++", self.time);
+
+        println!("Resources:");
+        for resource in self.resources.borrow().iter() {
+            println!("- {}:", resource.name());
+            println!("  - Currently allocated: {}", resource.n_allocated());
+            println!("  - Allocation rate: {:.2}", resource.allocation_rate());
+            println!("  - Average allocation: {:.2}", resource.average_allocation());
+        }
+
+        println!("Entity Sets:");
+        for entity_set in self.entity_sets.borrow().iter() {
+            println!("- {}:", entity_set.name());
+            println!("  - Current size: {}", entity_set.size());
+            println!("  - Average size: {:.2}", entity_set.average_size());
+            println!("  - Average time in set: {:.2}", entity_set.average_time_in_set());
+            println!("  - Max time in set: {:.2}", entity_set.max_time_in_set());
+        }
+
+        println!("+++++++++++++++++++++++++++++++++++++++++++");
+    }
+
     /// Simulates one step, returns whether stop condition is met
     /// A step can be either a process callback or an event from the FEL.
     /// If both are scheduled to the same time, the process callback takes precedence.
@@ -247,6 +274,11 @@ impl Scheduler {
             }
 
             *self.last_analytics.borrow_mut() = self.time;
+
+            // Print analytics
+            if self.time % ANALYTICS_PRINT_TIME == 0.0 {
+                Self::instance().unwrap().print_analytics();
+            }
         }
 
         if let Some(proc_time) = proc_time {
@@ -274,15 +306,15 @@ impl Scheduler {
         loop {
             let stop = self.simulate_one_step();
 
-            println!("--------------------------------------------------");
+            println!("--------------------------------------------------------------------------");
             std::thread::sleep(std::time::Duration::from_secs_f32(0.5));
             println!(
-                "{} - Step complete. Events left in FEL: {}. Scheduled process callbacks: {}",
+                "{:.2} - Step complete. Events in FEL: {}. Scheduled process callbacks: {}",
                 self.time,
                 self.event_queue.borrow().len(),
                 self.process_finish_events.borrow().len()
             );
-            println!("--------------------------------------------------");
+            println!("--------------------------------------------------------------------------");
 
             if stop {
                 break;
